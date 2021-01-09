@@ -1,18 +1,11 @@
 
 from urllib import request
-from PIL import Image,ImageMath
+from PIL import Image
 from io import BytesIO
-import json
 import os
 import time
 import base64
 
-
-
-LABEL_URL      = 'https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/map/label/tree?app_sn=ys_obc'
-POINT_LIST_URL = 'https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/map/point/list?map_id=2&app_sn=ys_obc'
-
-header = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.105 Safari/537.36'
 
 FILE_PATH = os.path.dirname(__file__)
 
@@ -66,88 +59,6 @@ data = {
     ],
     "date":"" #记录上次更新"all_resource_point_list"的日期
 }
-
-
-
-def up_icon_image(sublist):
-    # 检查是否有图标，没有图标下载保存到本地
-    id = sublist["id"]
-    icon_url = sublist["icon"]
-
-    icon_path = os.path.join(FILE_PATH,"icon",f"{id}.png")
-
-    if not os.path.exists(icon_path):
-        schedule = request.Request(icon_url)
-        schedule.add_header('User-Agent', header)
-        with request.urlopen(schedule) as f:
-            icon = Image.open(f)
-            icon = icon.resize((150, 150))
-
-            box_alpha = Image.open(os.path.join(FILE_PATH,"icon","box_alpha.png")).getchannel("A")
-            box = Image.open(os.path.join(FILE_PATH,"icon","box.png"))
-
-            try:
-                icon_alpha = icon.getchannel("A")
-                icon_alpha = ImageMath.eval("convert(a*b/256, 'L')", a=icon_alpha, b=box_alpha)
-            except ValueError:
-                # 米游社的图有时候会没有alpha导致报错，这时候直接使用box_alpha当做alpha就行
-                icon_alpha = box_alpha
-
-            icon2 = Image.new("RGBA", (150, 150), "#00000000")
-            icon2.paste(icon, (0, -10))
-
-            bg = Image.new("RGBA", (150, 150), "#00000000")
-            bg.paste(icon2, mask=icon_alpha)
-            bg.paste(box, mask=box)
-
-            with open(icon_path, "wb") as icon_file:
-                bg.save(icon_file)
-
-def up_label_and_point_list():
-    # 更新label列表和资源点列表
-
-    schedule = request.Request(LABEL_URL)
-    schedule.add_header('User-Agent', header)
-    with request.urlopen(schedule) as f:
-        if f.code != 200:  # 检查返回的状态码是否是200
-            raise ValueError(f"资源标签列表初始化失败，错误代码{f.code}")
-        label_data = json.loads(f.read().decode('utf-8'))
-
-        for label in label_data["data"]["tree"]:
-            data["all_resource_type"][str(label["id"])] = label
-
-            for sublist in label["children"]:
-                data["all_resource_type"][str(sublist["id"])] = sublist
-                data["can_query_type_list"][sublist["name"]] = str(sublist["id"])
-                up_icon_image(sublist)
-
-            label["children"] = []
-
-    schedule = request.Request(POINT_LIST_URL)
-    schedule.add_header('User-Agent', header)
-    with request.urlopen(schedule) as f:
-        if f.code != 200:  # 检查返回的状态码是否是200
-            raise ValueError(f"资源点列表初始化失败，错误代码{f.code}")
-        test = json.loads(f.read().decode('utf-8'))
-        data["all_resource_point_list"] = test["data"]["point_list"]
-
-    data["date"] = time.strftime("%d")
-
-
-
-# def load_resource_type_id():
-#     with open(os.path.join(FILE_PATH,'resource_type_id.json'), 'r', encoding='UTF-8') as f:
-#         json_data = json.load(f)
-#         for id in json_data.keys():
-#             data["all_resource_type"][id] = json_data[id]
-#             if json_data[id]["depth"] != 1:
-#                 data["can_query_type_list"][json_data[id]["name"]] = id
-
-
-# 初始化
-# load_resource_type_id()
-up_label_and_point_list()
-
 
 
 
